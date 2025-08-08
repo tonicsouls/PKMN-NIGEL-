@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Pokedex - Gen 1-4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #1f2937; /* gray-800 */
+            color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .pokedex {
+            width: 100%;
+            max-width: 1000px;
+            min-height: 700px;
+            display: flex;
+            flex-direction: column; /* Stack panels on mobile */
+            background: #dc2626; /* red-600 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.6);
+            border: 3px solid #a01c1c;
+        }
+        @media (min-width: 800px) {
+            .pokedex {
+                flex-direction: row; /* Side-by-side on larger screens */
+                height: 700px;
+            }
+        }
+        .pokedex-left, .pokedex-right {
+            flex: 1;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .pokedex-left {
+            border-bottom: 8px solid #a01c1c;
+        }
+        @media (min-width: 800px) {
+            .pokedex-left {
+                border-right: 8px solid #a01c1c;
+                border-bottom: none;
+            }
+        }
+        .screen {
+            background-color: #e5e7eb; /* gray-200 */
+            border: 10px solid #4b5563; /* gray-600 */
+            border-radius: 0.5rem;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .stat-bar-bg { background-color: #d1d5db; }
+        .stat-bar { transition: width 0.5s ease-in-out; }
+        .type-badge { font-family: 'Press Start 2P', cursive; text-shadow: 1px 1px #333; }
+        .pokemon-list::-webkit-scrollbar { width: 8px; }
+        .pokemon-list::-webkit-scrollbar-track { background: #4b5563; }
+        .pokemon-list::-webkit-scrollbar-thumb { background: #9ca3af; }
+        .pokemon-list::-webkit-scrollbar-thumb:hover { background: #f9fafb; }
+        .led { box-shadow: 0 0 5px 2px rgba(255, 255, 255, 0.5); }
+        .d-pad-center { box-shadow: inset 0 0 5px rgba(0,0,0,0.4); }
+        .d-pad div { transition: background-color 0.2s; }
+        .d-pad div:active, .d-pad div:focus { background-color: #1f2937; outline: none; }
+        .search-input::placeholder { color: #9ca3af; }
+        
+        /* Shiny Toggle Switch */
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5563; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #f59e0b; } /* amber-500 */
+        input:checked + .slider:before { transform: translateX(26px); }
+        .shiny-text { font-family: 'Press Start 2P', cursive; font-size: 10px; }
+
+        /* Tabs for right panel */
+        .tab-button {
+            background-color: #4b5563; /* gray-600 */
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border-radius: 0.5rem 0.5rem 0 0;
+        }
+        .tab-button.active {
+            background-color: #1f2937; /* gray-800 */
+            color: #f59e0b; /* amber-400 */
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .evolution-item {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .evolution-item:hover {
+            transform: scale(1.1);
+        }
+        .stat-highlight {
+            color: #f59e0b; /* amber-500 */
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="pokedex">
+    <!-- Left Panel -->
+    <div class="pokedex-left">
+        <div class="flex items-start p-2 mb-2">
+            <div class="flex items-center space-x-2">
+                <div class="led w-12 h-12 bg-sky-400 rounded-full border-4 border-white"></div>
+                <div class="led w-5 h-5 bg-red-500 rounded-full border-2 border-white"></div>
+                <div class="led w-5 h-5 bg-yellow-400 rounded-full border-2 border-white"></div>
+                <div class="led w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
+            </div>
+        </div>
+
+        <div class="flex-grow grid grid-cols-10 grid-rows-5 gap-4">
+            <div class="col-span-10 md:col-span-6 row-span-3 md:row-span-4 screen p-4 flex flex-col items-center justify-center text-black">
+                <div id="image-container" class="w-full h-48 flex items-center justify-center mb-2">
+                    <img id="pokemon-image" src="" alt="Official artwork of the currently selected Pokemon" class="max-h-full max-w-full object-contain">
+                </div>
+                <div id="pokemon-id" class="text-sm font-bold">#001</div>
+                <div id="pokemon-name" class="text-xl capitalize font-bold">Bulbasaur</div>
+                <div id="pokemon-types" class="flex space-x-2 mt-2"></div>
+            </div>
+
+            <div class="col-span-10 md:col-span-4 row-span-2 md:row-span-5 screen p-2 bg-gray-800 text-white flex flex-col">
+                <h2 class="text-center text-lg mb-2 border-b border-gray-600 pb-1">Pokémon List</h2>
+                <div id="pokemon-list" class="pokemon-list flex-grow overflow-y-auto pr-2"></div>
+            </div>
+
+            <div class="col-span-10 md:col-span-6 row-span-1 flex items-center justify-between mt-4 md:mt-0">
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="search-input" placeholder="Search..." aria-label="Search for a Pokémon" class="search-input bg-gray-800 text-white border-2 border-gray-600 rounded-md px-3 py-2 w-32 text-sm focus:outline-none focus:border-sky-400">
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="shiny-text text-yellow-300">SHINY</span>
+                    <label class="switch" aria-label="Toggle shiny Pokemon view">
+                        <input type="checkbox" id="shiny-toggle" tabindex="0">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="d-pad grid grid-cols-3 w-24 h-24">
+                    <div></div><div id="prev-button" role="button" tabindex="0" aria-label="Previous Pokemon" class="bg-gray-700 rounded-t-md cursor-pointer flex justify-center items-center text-xl">▲</div><div></div>
+                    <div id="prev-button-alt" role="button" tabindex="0" aria-label="Previous Pokemon" class="bg-gray-700 rounded-l-md cursor-pointer flex justify-center items-center text-xl">◀</div>
+                    <div class="d-pad-center bg-gray-600"></div>
+                    <div id="next-button-alt" role="button" tabindex="0" aria-label="Next Pokemon" class="bg-gray-700 rounded-r-md cursor-pointer flex justify-center items-center text-xl">▶</div>
+                    <div></div><div id="next-button" role="button" tabindex="0" aria-label="Next Pokemon" class="bg-gray-700 rounded-b-md cursor-pointer flex justify-center items-center text-xl">▼</div><div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Panel -->
+    <div class="pokedex-right">
+        <div class="screen p-4 bg-gray-800 text-white flex flex-col h-full">
+            <h2 id="pokemon-name-right" class="text-3xl font-bold capitalize text-center mb-4">Bulbasaur</h2>
+            
+            <div class="flex border-b-2 border-gray-600 mb-2">
+                <button class="tab-button active" data-tab="info-tab" tabindex="0">Info</button>
+                <button class="tab-button" data-tab="stats-tab" tabindex="0">Stats</button>
+                <button class="tab-button" data-tab="evolutions-tab" tabindex="0">Evolutions</button>
+            </div>
+
+            <div class="flex-grow overflow-y-auto">
+                <div id="info-tab" class="tab-content active">
+                    <p id="pokemon-species" class="text-lg"><span class="font-bold">Species:</span> Seed Pokémon</p>
+                    <p id="pokemon-height" class="text-lg"><span class="font-bold">Height:</span> 0.7 m</p>
+                    <p id="pokemon-weight" class="text-lg"><span class="font-bold">Weight:</span> 6.9 kg</p>
+                    <h3 class="text-xl font-bold mt-4 mb-2 border-b-2 border-gray-600 pb-1">Notable Moves</h3>
+                    <div id="moves-container" class="text-base space-y-1">
+                        <!-- Moves will be inserted here -->
+                    </div>
+                </div>
+
+                <div id="stats-tab" class="tab-content">
+                    <h3 class="text-2xl font-bold mb-2">Base Stats</h3>
+                    <div id="stats-container" class="space-y-2"></div>
+                </div>
+
+                <div id="evolutions-tab" class="tab-content">
+                     <h3 class="text-2xl font-bold mb-2">Evolution Chain</h3>
+                     <div id="evolution-container" class="flex flex-col items-center space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- DATA ---
+    // The full Pokémon data for Generations 1-4 is now embedded directly in the script.
+    const pokemonData = [{"id":1,"name":"bulbasaur","types":["grass","poison"],"stats":{"hp":45,"attack":49,"defense":49,"spatk":65,"spdef":65,"speed":45},"species":"Seed","height":0.7,"weight":6.9,"moves":["razor-wind","swords-dance","cut","bind"],"evolutions":[{"name":"bulbasaur","method":"Base"},{"name":"ivysaur","method":"Level 16"},{"name":"venusaur","method":"Level 32"}]},{"id":2,"name":"ivysaur","types":["grass","poison"],"stats":{"hp":60,"attack":62,"defense":63,"spatk":80,"spdef":80,"speed":60},"species":"Seed","height":1,"weight":13,"moves":["swords-dance","cut","bind","vine-whip"],"evolutions":[{"name":"bulbasaur","method":"Base"},{"name":"ivysaur","method":"Level 16"},{"name":"venusaur","method":"Level 32"}]},{"id":3,"name":"venusaur","types":["grass","poison"],"stats":{"hp":80,"attack":82,"defense":83,"spatk":100,"spdef":100,"speed":80},"species":"Seed","height":2,"weight":100,"moves":["swords-dance","cut","bind","vine-whip"],"evolutions":[{"name":"bulbasaur","method":"Base"},{"name":"ivysaur","method":"Level 16"},{"name":"venusaur","method":"Level 32"}]},{"id":4,"name":"charmander","types":["fire"],"stats":{"hp":39,"attack":52,"defense":43,"spatk":60,"spdef":50,"speed":65},"species":"Lizard","height":0.6,"weight":8.5,"moves":["mega-punch","fire-punch","thunder-punch","scratch"],"evolutions":[{"name":"charmander","method":"Base"},{"name":"charmeleon","method":"Level 16"},{"name":"charizard","method":"Level 36"}]},{"id":5,"name":"charmeleon","types":["fire"],"stats":{"hp":58,"attack":64,"defense":58,"spatk":80,"spdef":65,"speed":80},"species":"Flame","height":1.1,"weight":19,"moves":["mega-punch","fire-punch","thunder-punch","scratch"],"evolutions":[{"name":"charmander","method":"Base"},{"name":"charmeleon","method":"Level 16"},{"name":"charizard","method":"Level 36"}]},{"id":6,"name":"charizard","types":["fire","flying"],"stats":{"hp":78,"attack":84,"defense":78,"spatk":109,"spdef":85,"speed":100},"species":"Flame","height":1.7,"weight":90.5,"moves":["mega-punch","fire-punch","thunder-punch","wing-attack"],"evolutions":[{"name":"charmander","method":"Base"},{"name":"charmeleon","method":"Level 16"},{"name":"charizard","method":"Level 36"}]},{"id":7,"name":"squirtle","types":["water"],"stats":{"hp":44,"attack":48,"defense":65,"spatk":50,"spdef":64,"speed":43},"species":"Tiny Turtle","height":0.5,"weight":9,"moves":["mega-punch","ice-punch","mega-kick","tackle"],"evolutions":[{"name":"squirtle","method":"Base"},{"name":"wartortle","method":"Level 16"},{"name":"blastoise","method":"Level 36"}]},{"id":8,"name":"wartortle","types":["water"],"stats":{"hp":59,"attack":63,"defense":80,"spatk":65,"spdef":80,"speed":58},"species":"Turtle","height":1,"weight":22.5,"moves":["mega-punch","ice-punch","mega-kick","tackle"],"evolutions":[{"name":"squirtle","method":"Base"},{"name":"wartortle","method":"Level 16"},{"name":"blastoise","method":"Level 36"}]},{"id":9,"name":"blastoise","types":["water"],"stats":{"hp":79,"attack":83,"defense":100,"spatk":85,"spdef":105,"speed":78},"species":"Shellfish","height":1.6,"weight":85.5,"moves":["mega-punch","ice-punch","mega-kick","tackle"],"evolutions":[{"name":"squirtle","method":"Base"},{"name":"wartortle","method":"Level 16"},{"name":"blastoise","method":"Level 36"}]},{"id":10,"name":"caterpie","types":["bug"],"stats":{"hp":45,"attack":30,"defense":35,"spatk":20,"spdef":20,"speed":45},"species":"Worm","height":0.3,"weight":2.9,"moves":["tackle","string-shot","snore","bug-bite"],"evolutions":[{"name":"caterpie","method":"Base"},{"name":"metapod","method":"Level 7"},{"name":"butterfree","method":"Level 10"}]},{"id":11,"name":"metapod","types":["bug"],"stats":{"hp":50,"attack":20,"defense":55,"spatk":25,"spdef":25,"speed":30},"species":"Cocoon","height":0.7,"weight":9.9,"moves":["harden","iron-defense","bug-bite","electroweb"],"evolutions":[{"name":"caterpie","method":"Base"},{"name":"metapod","method":"Level 7"},{"name":"butterfree","method":"Level 10"}]},{"id":12,"name":"butterfree","types":["bug","flying"],"stats":{"hp":60,"attack":45,"defense":50,"spatk":90,"spdef":80,"speed":70},"species":"Butterfly","height":1.1,"weight":32,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"caterpie","method":"Base"},{"name":"metapod","method":"Level 7"},{"name":"butterfree","method":"Level 10"}]},{"id":13,"name":"weedle","types":["bug","poison"],"stats":{"hp":40,"attack":35,"defense":30,"spatk":20,"spdef":20,"speed":50},"species":"Hairy Bug","height":0.3,"weight":3.2,"moves":["poison-sting","string-shot","bug-bite","electroweb"],"evolutions":[{"name":"weedle","method":"Base"},{"name":"kakuna","method":"Level 7"},{"name":"beedrill","method":"Level 10"}]},{"id":14,"name":"kakuna","types":["bug","poison"],"stats":{"hp":45,"attack":25,"defense":50,"spatk":25,"spdef":25,"speed":35},"species":"Cocoon","height":0.6,"weight":10,"moves":["harden","iron-defense","bug-bite","electroweb"],"evolutions":[{"name":"weedle","method":"Base"},{"name":"kakuna","method":"Level 7"},{"name":"beedrill","method":"Level 10"}]},{"id":15,"name":"beedrill","types":["bug","poison"],"stats":{"hp":65,"attack":90,"defense":40,"spatk":45,"spdef":80,"speed":75},"species":"Poison Bee","height":1,"weight":29.5,"moves":["swords-dance","cut","fury-attack","twineedle"],"evolutions":[{"name":"weedle","method":"Base"},{"name":"kakuna","method":"Level 7"},{"name":"beedrill","method":"Level 10"}]},{"id":16,"name":"pidgey","types":["normal","flying"],"stats":{"hp":40,"attack":45,"defense":40,"spatk":35,"spdef":35,"speed":56},"species":"Tiny Bird","height":0.3,"weight":1.8,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"pidgey","method":"Base"},{"name":"pidgeotto","method":"Level 18"},{"name":"pidgeot","method":"Level 36"}]},{"id":17,"name":"pidgeotto","types":["normal","flying"],"stats":{"hp":63,"attack":60,"defense":55,"spatk":50,"spdef":50,"speed":71},"species":"Bird","height":1.1,"weight":30,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"pidgey","method":"Base"},{"name":"pidgeotto","method":"Level 18"},{"name":"pidgeot","method":"Level 36"}]},{"id":18,"name":"pidgeot","types":["normal","flying"],"stats":{"hp":83,"attack":80,"defense":75,"spatk":70,"spdef":70,"speed":101},"species":"Bird","height":1.5,"weight":39.5,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"pidgey","method":"Base"},{"name":"pidgeotto","method":"Level 18"},{"name":"pidgeot","method":"Level 36"}]},{"id":19,"name":"rattata","types":["normal"],"stats":{"hp":30,"attack":56,"defense":35,"spatk":25,"spdef":35,"speed":72},"species":"Mouse","height":0.3,"weight":3.5,"moves":["cut","tackle","body-slam","take-down"],"evolutions":[{"name":"rattata","method":"Base"},{"name":"raticate","method":"Level 20"}]},{"id":20,"name":"raticate","types":["normal"],"stats":{"hp":55,"attack":81,"defense":60,"spatk":50,"spdef":70,"speed":97},"species":"Mouse","height":0.7,"weight":18.5,"moves":["swords-dance","cut","tackle","body-slam"],"evolutions":[{"name":"rattata","method":"Base"},{"name":"raticate","method":"Level 20"}]},{"id":21,"name":"spearow","types":["normal","flying"],"stats":{"hp":40,"attack":60,"defense":30,"spatk":31,"spdef":31,"speed":70},"species":"Tiny Bird","height":0.3,"weight":2,"moves":["razor-wind","fly","fury-attack","peck"],"evolutions":[{"name":"spearow","method":"Base"},{"name":"fearow","method":"Level 20"}]},{"id":22,"name":"fearow","types":["normal","flying"],"stats":{"hp":65,"attack":90,"defense":65,"spatk":61,"spdef":61,"speed":100},"species":"Beak","height":1.2,"weight":38,"moves":["razor-wind","fly","fury-attack","peck"],"evolutions":[{"name":"spearow","method":"Base"},{"name":"fearow","method":"Level 20"}]},{"id":23,"name":"ekans","types":["poison"],"stats":{"hp":35,"attack":60,"defense":44,"spatk":40,"spdef":54,"speed":55},"species":"Snake","height":2,"weight":6.9,"moves":["bind","slam","headbutt","wrap"],"evolutions":[{"name":"ekans","method":"Base"},{"name":"arbok","method":"Level 22"}]},{"id":24,"name":"arbok","types":["poison"],"stats":{"hp":60,"attack":95,"defense":69,"spatk":65,"spdef":79,"speed":80},"species":"Cobra","height":3.5,"weight":65,"moves":["bind","slam","headbutt","wrap"],"evolutions":[{"name":"ekans","method":"Base"},{"name":"arbok","method":"Level 22"}]},{"id":25,"name":"pikachu","types":["electric"],"stats":{"hp":35,"attack":55,"defense":40,"spatk":50,"spdef":50,"speed":90},"species":"Mouse","height":0.4,"weight":6,"moves":["mega-punch","thunder-punch","mega-kick","slam"],"evolutions":[{"name":"pichu","method":"High Friendship"},{"name":"pikachu","method":"Base"},{"name":"raichu","method":"Thunder Stone"}]},{"id":26,"name":"raichu","types":["electric"],"stats":{"hp":60,"attack":90,"defense":55,"spatk":90,"spdef":80,"speed":110},"species":"Mouse","height":0.8,"weight":30,"moves":["mega-punch","thunder-punch","mega-kick","slam"],"evolutions":[{"name":"pichu","method":"High Friendship"},{"name":"pikachu","method":"Base"},{"name":"raichu","method":"Thunder Stone"}]},{"id":27,"name":"sandshrew","types":["ground"],"stats":{"hp":50,"attack":75,"defense":85,"spatk":20,"spdef":30,"speed":40},"species":"Mouse","height":0.6,"weight":12,"moves":["swords-dance","cut","sand-attack","headbutt"],"evolutions":[{"name":"sandshrew","method":"Base"},{"name":"sandslash","method":"Level 22"}]},{"id":28,"name":"sandslash","types":["ground"],"stats":{"hp":75,"attack":100,"defense":110,"spatk":45,"spdef":55,"speed":65},"species":"Mouse","height":1,"weight":29.5,"moves":["swords-dance","cut","sand-attack","headbutt"],"evolutions":[{"name":"sandshrew","method":"Base"},{"name":"sandslash","method":"Level 22"}]},{"id":29,"name":"nidoran-f","types":["poison"],"stats":{"hp":55,"attack":47,"defense":52,"spatk":40,"spdef":40,"speed":41},"species":"Poison Pin","height":0.4,"weight":7,"moves":["cut","double-kick","tackle","body-slam"],"evolutions":[{"name":"nidoran-f","method":"Base"},{"name":"nidorina","method":"Level 16"},{"name":"nidoqueen","method":"Moon Stone"}]},{"id":30,"name":"nidorina","types":["poison"],"stats":{"hp":70,"attack":62,"defense":67,"spatk":55,"spdef":55,"speed":56},"species":"Poison Pin","height":0.8,"weight":20,"moves":["cut","double-kick","tackle","body-slam"],"evolutions":[{"name":"nidoran-f","method":"Base"},{"name":"nidorina","method":"Level 16"},{"name":"nidoqueen","method":"Moon Stone"}]},{"id":31,"name":"nidoqueen","types":["poison","ground"],"stats":{"hp":90,"attack":92,"defense":87,"spatk":75,"spdef":85,"speed":76},"species":"Drill","height":1.3,"weight":60,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"nidoran-f","method":"Base"},{"name":"nidorina","method":"Level 16"},{"name":"nidoqueen","method":"Moon Stone"}]},{"id":32,"name":"nidoran-m","types":["poison"],"stats":{"hp":46,"attack":57,"defense":40,"spatk":40,"spdef":40,"speed":50},"species":"Poison Pin","height":0.5,"weight":9,"moves":["cut","double-kick","horn-attack","tackle"],"evolutions":[{"name":"nidoran-m","method":"Base"},{"name":"nidorino","method":"Level 16"},{"name":"nidoking","method":"Moon Stone"}]},{"id":33,"name":"nidorino","types":["poison"],"stats":{"hp":61,"attack":72,"defense":57,"spatk":55,"spdef":55,"speed":65},"species":"Poison Pin","height":0.9,"weight":19.5,"moves":["cut","double-kick","horn-attack","tackle"],"evolutions":[{"name":"nidoran-m","method":"Base"},{"name":"nidorino","method":"Level 16"},{"name":"nidoking","method":"Moon Stone"}]},{"id":34,"name":"nidoking","types":["poison","ground"],"stats":{"hp":81,"attack":102,"defense":77,"spatk":85,"spdef":75,"speed":85},"species":"Drill","height":1.4,"weight":62,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"nidoran-m","method":"Base"},{"name":"nidorino","method":"Level 16"},{"name":"nidoking","method":"Moon Stone"}]},{"id":35,"name":"clefairy","types":["fairy"],"stats":{"hp":70,"attack":45,"defense":48,"spatk":60,"spdef":65,"speed":35},"species":"Fairy","height":0.6,"weight":7.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"cleffa","method":"High Friendship"},{"name":"clefairy","method":"Base"},{"name":"clefable","method":"Moon Stone"}]},{"id":36,"name":"clefable","types":["fairy"],"stats":{"hp":95,"attack":70,"defense":73,"spatk":95,"spdef":90,"speed":60},"species":"Fairy","height":1.3,"weight":40,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"cleffa","method":"High Friendship"},{"name":"clefairy","method":"Base"},{"name":"clefable","method":"Moon Stone"}]},{"id":37,"name":"vulpix","types":["fire"],"stats":{"hp":38,"attack":41,"defense":40,"spatk":50,"spdef":65,"speed":65},"species":"Fox","height":0.6,"weight":9.9,"moves":["ember","headbutt","body-slam","take-down"],"evolutions":[{"name":"vulpix","method":"Base"},{"name":"ninetales","method":"Fire Stone"}]},{"id":38,"name":"ninetales","types":["fire"],"stats":{"hp":73,"attack":76,"defense":75,"spatk":81,"spdef":100,"speed":100},"species":"Fox","height":1.1,"weight":19.9,"moves":["ember","headbutt","body-slam","take-down"],"evolutions":[{"name":"vulpix","method":"Base"},{"name":"ninetales","method":"Fire Stone"}]},{"id":39,"name":"jigglypuff","types":["normal","fairy"],"stats":{"hp":115,"attack":45,"defense":20,"spatk":45,"spdef":25,"speed":20},"species":"Balloon","height":0.5,"weight":5.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"igglybuff","method":"High Friendship"},{"name":"jigglypuff","method":"Base"},{"name":"wigglytuff","method":"Moon Stone"}]},{"id":40,"name":"wigglytuff","types":["normal","fairy"],"stats":{"hp":140,"attack":70,"defense":45,"spatk":85,"spdef":50,"speed":45},"species":"Balloon","height":1,"weight":12,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"igglybuff","method":"High Friendship"},{"name":"jigglypuff","method":"Base"},{"name":"wigglytuff","method":"Moon Stone"}]},{"id":41,"name":"zubat","types":["poison","flying"],"stats":{"hp":40,"attack":45,"defense":35,"spatk":30,"spdef":40,"speed":55},"species":"Bat","height":0.8,"weight":7.5,"moves":["razor-wind","wing-attack","whirlwind","take-down"],"evolutions":[{"name":"zubat","method":"Base"},{"name":"golbat","method":"Level 22"},{"name":"crobat","method":"High Friendship"}]},{"id":42,"name":"golbat","types":["poison","flying"],"stats":{"hp":75,"attack":80,"defense":70,"spatk":65,"spdef":75,"speed":90},"species":"Bat","height":1.6,"weight":55,"moves":["razor-wind","wing-attack","whirlwind","take-down"],"evolutions":[{"name":"zubat","method":"Base"},{"name":"golbat","method":"Level 22"},{"name":"crobat","method":"High Friendship"}]},{"id":43,"name":"oddish","types":["grass","poison"],"stats":{"hp":45,"attack":50,"defense":55,"spatk":75,"spdef":65,"speed":30},"species":"Weed","height":0.5,"weight":5.4,"moves":["swords-dance","cut","acid","take-down"],"evolutions":[{"name":"oddish","method":"Base"},{"name":"gloom","method":"Level 21"},{"name":"vileplume","method":"Leaf Stone"}]},{"id":44,"name":"gloom","types":["grass","poison"],"stats":{"hp":60,"attack":65,"defense":70,"spatk":85,"spdef":75,"speed":40},"species":"Weed","height":0.8,"weight":8.6,"moves":["swords-dance","cut","acid","take-down"],"evolutions":[{"name":"oddish","method":"Base"},{"name":"gloom","method":"Level 21"},{"name":"vileplume","method":"Leaf Stone"}]},{"id":45,"name":"vileplume","types":["grass","poison"],"stats":{"hp":75,"attack":80,"defense":85,"spatk":110,"spdef":90,"speed":50},"species":"Flower","height":1.2,"weight":18.6,"moves":["swords-dance","cut","body-slam","take-down"],"evolutions":[{"name":"oddish","method":"Base"},{"name":"gloom","method":"Level 21"},{"name":"vileplume","method":"Leaf Stone"}]},{"id":46,"name":"paras","types":["bug","grass"],"stats":{"hp":35,"attack":70,"defense":55,"spatk":45,"spdef":55,"speed":25},"species":"Mushroom","height":0.3,"weight":5.4,"moves":["swords-dance","cut","headbutt","body-slam"],"evolutions":[{"name":"paras","method":"Base"},{"name":"parasect","method":"Level 24"}]},{"id":47,"name":"parasect","types":["bug","grass"],"stats":{"hp":60,"attack":95,"defense":80,"spatk":60,"spdef":80,"speed":30},"species":"Mushroom","height":1,"weight":29.5,"moves":["swords-dance","cut","headbutt","body-slam"],"evolutions":[{"name":"paras","method":"Base"},{"name":"parasect","method":"Level 24"}]},{"id":48,"name":"venonat","types":["bug","poison"],"stats":{"hp":60,"attack":55,"defense":50,"spatk":40,"spdef":55,"speed":45},"species":"Insect","height":1,"weight":30,"moves":["tackle","take-down","double-edge","supersonic"],"evolutions":[{"name":"venonat","method":"Base"},{"name":"venomoth","method":"Level 31"}]},{"id":49,"name":"venomoth","types":["bug","poison"],"stats":{"hp":70,"attack":65,"defense":60,"spatk":90,"spdef":75,"speed":90},"species":"Poison Moth","height":1.5,"weight":12.5,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"venonat","method":"Base"},{"name":"venomoth","method":"Level 31"}]},{"id":50,"name":"diglett","types":["ground"],"stats":{"hp":10,"attack":55,"defense":25,"spatk":35,"spdef":45,"speed":95},"species":"Mole","height":0.2,"weight":0.8,"moves":["sand-attack","scratch","cut","body-slam"],"evolutions":[{"name":"diglett","method":"Base"},{"name":"dugtrio","method":"Level 26"}]},{"id":51,"name":"dugtrio","types":["ground"],"stats":{"hp":35,"attack":100,"defense":50,"spatk":50,"spdef":70,"speed":120},"species":"Mole","height":0.7,"weight":33.3,"moves":["sand-attack","scratch","cut","body-slam"],"evolutions":[{"name":"diglett","method":"Base"},{"name":"dugtrio","method":"Level 26"}]},{"id":52,"name":"meowth","types":["normal"],"stats":{"hp":40,"attack":45,"defense":35,"spatk":40,"spdef":40,"speed":90},"species":"Scratch Cat","height":0.4,"weight":4.2,"moves":["pay-day","scratch","slam","headbutt"],"evolutions":[{"name":"meowth","method":"Base"},{"name":"persian","method":"Level 28"}]},{"id":53,"name":"persian","types":["normal"],"stats":{"hp":65,"attack":70,"defense":60,"spatk":65,"spdef":65,"speed":115},"species":"Classy Cat","height":1,"weight":32,"moves":["pay-day","scratch","slam","headbutt"],"evolutions":[{"name":"meowth","method":"Base"},{"name":"persian","method":"Level 28"}]},{"id":54,"name":"psyduck","types":["water"],"stats":{"hp":50,"attack":52,"defense":48,"spatk":65,"spdef":50,"speed":55},"species":"Duck","height":0.8,"weight":19.6,"moves":["mega-punch","ice-punch","mega-kick","scratch"],"evolutions":[{"name":"psyduck","method":"Base"},{"name":"golduck","method":"Level 33"}]},{"id":55,"name":"golduck","types":["water"],"stats":{"hp":80,"attack":82,"defense":78,"spatk":95,"spdef":80,"speed":85},"species":"Duck","height":1.7,"weight":76.6,"moves":["mega-punch","ice-punch","mega-kick","scratch"],"evolutions":[{"name":"psyduck","method":"Base"},{"name":"golduck","method":"Level 33"}]},{"id":56,"name":"mankey","types":["fighting"],"stats":{"hp":40,"attack":80,"defense":35,"spatk":35,"spdef":45,"speed":70},"species":"Pig Monkey","height":0.5,"weight":28,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"mankey","method":"Base"},{"name":"primeape","method":"Level 28"}]},{"id":57,"name":"primeape","types":["fighting"],"stats":{"hp":65,"attack":105,"defense":60,"spatk":60,"spdef":70,"speed":95},"species":"Pig Monkey","height":1,"weight":32,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"mankey","method":"Base"},{"name":"primeape","method":"Level 28"}]},{"id":58,"name":"growlithe","types":["fire"],"stats":{"hp":55,"attack":70,"defense":45,"spatk":70,"spdef":50,"speed":60},"species":"Puppy","height":0.7,"weight":19,"moves":["double-kick","ember","headbutt","body-slam"],"evolutions":[{"name":"growlithe","method":"Base"},{"name":"arcanine","method":"Fire Stone"}]},{"id":59,"name":"arcanine","types":["fire"],"stats":{"hp":90,"attack":110,"defense":80,"spatk":100,"spdef":80,"speed":95},"species":"Legendary","height":1.9,"weight":155,"moves":["ember","headbutt","body-slam","take-down"],"evolutions":[{"name":"growlithe","method":"Base"},{"name":"arcanine","method":"Fire Stone"}]},{"id":60,"name":"poliwag","types":["water"],"stats":{"hp":40,"attack":50,"defense":40,"spatk":40,"spdef":40,"speed":90},"species":"Tadpole","height":0.6,"weight":12.4,"moves":["double-slap","slam","headbutt","body-slam"],"evolutions":[{"name":"poliwag","method":"Base"},{"name":"poliwhirl","method":"Level 25"},{"name":"poliwrath","method":"Water Stone"}]},{"id":61,"name":"poliwhirl","types":["water"],"stats":{"hp":65,"attack":65,"defense":65,"spatk":50,"spdef":50,"speed":90},"species":"Tadpole","height":1,"weight":20,"moves":["mega-punch","ice-punch","mega-kick","double-slap"],"evolutions":[{"name":"poliwag","method":"Base"},{"name":"poliwhirl","method":"Level 25"},{"name":"poliwrath","method":"Water Stone"}]},{"id":62,"name":"poliwrath","types":["water","fighting"],"stats":{"hp":90,"attack":95,"defense":95,"spatk":70,"spdef":90,"speed":70},"species":"Tadpole","height":1.3,"weight":54,"moves":["mega-punch","ice-punch","mega-kick","double-slap"],"evolutions":[{"name":"poliwag","method":"Base"},{"name":"poliwhirl","method":"Level 25"},{"name":"poliwrath","method":"Water Stone"}]},{"id":63,"name":"abra","types":["psychic"],"stats":{"hp":25,"attack":20,"defense":15,"spatk":105,"spdef":55,"speed":90},"species":"Psi","height":0.9,"weight":19.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"abra","method":"Base"},{"name":"kadabra","method":"Level 16"},{"name":"alakazam","method":"Trade"}]},{"id":64,"name":"kadabra","types":["psychic"],"stats":{"hp":40,"attack":35,"defense":30,"spatk":120,"spdef":70,"speed":105},"species":"Psi","height":1.3,"weight":56.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"abra","method":"Base"},{"name":"kadabra","method":"Level 16"},{"name":"alakazam","method":"Trade"}]},{"id":65,"name":"alakazam","types":["psychic"],"stats":{"hp":55,"attack":50,"defense":45,"spatk":135,"spdef":95,"speed":120},"species":"Psi","height":1.5,"weight":48,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"abra","method":"Base"},{"name":"kadabra","method":"Level 16"},{"name":"alakazam","method":"Trade"}]},{"id":66,"name":"machop","types":["fighting"],"stats":{"hp":70,"attack":80,"defense":50,"spatk":35,"spdef":35,"speed":35},"species":"Superpower","height":0.8,"weight":19.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"machop","method":"Base"},{"name":"machoke","method":"Level 28"},{"name":"machamp","method":"Trade"}]},{"id":67,"name":"machoke","types":["fighting"],"stats":{"hp":80,"attack":100,"defense":70,"spatk":50,"spdef":60,"speed":45},"species":"Superpower","height":1.5,"weight":70.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"machop","method":"Base"},{"name":"machoke","method":"Level 28"},{"name":"machamp","method":"Trade"}]},{"id":68,"name":"machamp","types":["fighting"],"stats":{"hp":90,"attack":130,"defense":80,"spatk":65,"spdef":85,"speed":55},"species":"Superpower","height":1.6,"weight":130,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"machop","method":"Base"},{"name":"machoke","method":"Level 28"},{"name":"machamp","method":"Trade"}]},{"id":69,"name":"bellsprout","types":["grass","poison"],"stats":{"hp":50,"attack":75,"defense":35,"spatk":70,"spdef":30,"speed":40},"species":"Flower","height":0.7,"weight":4,"moves":["swords-dance","cut","bind","slam"],"evolutions":[{"name":"bellsprout","method":"Base"},{"name":"weepinbell","method":"Level 21"},{"name":"victreebel","method":"Leaf Stone"}]},{"id":70,"name":"weepinbell","types":["grass","poison"],"stats":{"hp":65,"attack":90,"defense":50,"spatk":85,"spdef":45,"speed":55},"species":"Flycatcher","height":1,"weight":6.4,"moves":["swords-dance","cut","bind","slam"],"evolutions":[{"name":"bellsprout","method":"Base"},{"name":"weepinbell","method":"Level 21"},{"name":"victreebel","method":"Leaf Stone"}]},{"id":71,"name":"victreebel","types":["grass","poison"],"stats":{"hp":80,"attack":105,"defense":65,"spatk":100,"spdef":70,"speed":70},"species":"Flycatcher","height":1.7,"weight":15.5,"moves":["swords-dance","cut","bind","slam"],"evolutions":[{"name":"bellsprout","method":"Base"},{"name":"weepinbell","method":"Level 21"},{"name":"victreebel","method":"Leaf Stone"}]},{"id":72,"name":"tentacool","types":["water","poison"],"stats":{"hp":40,"attack":40,"defense":35,"spatk":50,"spdef":100,"speed":70},"species":"Jellyfish","height":0.9,"weight":45.5,"moves":["swords-dance","cut","bind","wrap"],"evolutions":[{"name":"tentacool","method":"Base"},{"name":"tentacruel","method":"Level 30"}]},{"id":73,"name":"tentacruel","types":["water","poison"],"stats":{"hp":80,"attack":70,"defense":65,"spatk":80,"spdef":120,"speed":100},"species":"Jellyfish","height":1.6,"weight":55,"moves":["swords-dance","cut","bind","wrap"],"evolutions":[{"name":"tentacool","method":"Base"},{"name":"tentacruel","method":"Level 30"}]},{"id":74,"name":"geodude","types":["rock","ground"],"stats":{"hp":40,"attack":80,"defense":100,"spatk":30,"spdef":30,"speed":20},"species":"Rock","height":0.4,"weight":20,"moves":["mega-punch","fire-punch","thunder-punch","tackle"],"evolutions":[{"name":"geodude","method":"Base"},{"name":"graveler","method":"Level 25"},{"name":"golem","method":"Trade"}]},{"id":75,"name":"graveler","types":["rock","ground"],"stats":{"hp":55,"attack":95,"defense":115,"spatk":45,"spdef":45,"speed":35},"species":"Rock","height":1,"weight":105,"moves":["mega-punch","fire-punch","thunder-punch","tackle"],"evolutions":[{"name":"geodude","method":"Base"},{"name":"graveler","method":"Level 25"},{"name":"golem","method":"Trade"}]},{"id":76,"name":"golem","types":["rock","ground"],"stats":{"hp":80,"attack":120,"defense":130,"spatk":55,"spdef":65,"speed":45},"species":"Megaton","height":1.4,"weight":300,"moves":["mega-punch","fire-punch","thunder-punch","tackle"],"evolutions":[{"name":"geodude","method":"Base"},{"name":"graveler","method":"Level 25"},{"name":"golem","method":"Trade"}]},{"id":77,"name":"ponyta","types":["fire"],"stats":{"hp":50,"attack":85,"defense":55,"spatk":65,"spdef":65,"speed":90},"species":"Fire Horse","height":1,"weight":30,"moves":["stomp","ember","headbutt","tackle"],"evolutions":[{"name":"ponyta","method":"Base"},{"name":"rapidash","method":"Level 40"}]},{"id":78,"name":"rapidash","types":["fire"],"stats":{"hp":65,"attack":100,"defense":70,"spatk":80,"spdef":80,"speed":105},"species":"Fire Horse","height":1.7,"weight":95,"moves":["stomp","ember","headbutt","tackle"],"evolutions":[{"name":"ponyta","method":"Base"},{"name":"rapidash","method":"Level 40"}]},{"id":79,"name":"slowpoke","types":["water","psychic"],"stats":{"hp":90,"attack":65,"defense":65,"spatk":40,"spdef":40,"speed":15},"species":"Dopey","height":1.2,"weight":36,"moves":["pay-day","fire-blast","ice-beam","blizzard"],"evolutions":[{"name":"slowpoke","method":"Base"},{"name":"slowbro","method":"Level 37"}]},{"id":80,"name":"slowbro","types":["water","psychic"],"stats":{"hp":95,"attack":75,"defense":110,"spatk":100,"spdef":80,"speed":30},"species":"Hermit Crab","height":1.6,"weight":78.5,"moves":["mega-punch","fire-punch","ice-punch","mega-kick"],"evolutions":[{"name":"slowpoke","method":"Base"},{"name":"slowbro","method":"Level 37"}]},{"id":81,"name":"magnemite","types":["electric","steel"],"stats":{"hp":25,"attack":35,"defense":70,"spatk":95,"spdef":55,"speed":45},"species":"Magnet","height":0.3,"weight":6,"moves":["tackle","take-down","double-edge","supersonic"],"evolutions":[{"name":"magnemite","method":"Base"},{"name":"magneton","method":"Level 30"},{"name":"magnezone","method":"Level up in magnetic field"}]},{"id":82,"name":"magneton","types":["electric","steel"],"stats":{"hp":50,"attack":60,"defense":95,"spatk":120,"spdef":70,"speed":70},"species":"Magnet","height":1,"weight":60,"moves":["tackle","take-down","double-edge","supersonic"],"evolutions":[{"name":"magnemite","method":"Base"},{"name":"magneton","method":"Level 30"},{"name":"magnezone","method":"Level up in magnetic field"}]},{"id":83,"name":"farfetchd","types":["normal","flying"],"stats":{"hp":52,"attack":90,"defense":55,"spatk":58,"spdef":62,"speed":60},"species":"Wild Duck","height":0.8,"weight":15,"moves":["razor-wind","swords-dance","cut","fly"],"evolutions":[{"name":"farfetchd","method":"Base"}]},{"id":84,"name":"doduo","types":["normal","flying"],"stats":{"hp":35,"attack":85,"defense":45,"spatk":35,"spdef":35,"speed":75},"species":"Twin Bird","height":1.4,"weight":39.2,"moves":["whirlwind","fly","fury-attack","peck"],"evolutions":[{"name":"doduo","method":"Base"},{"name":"dodrio","method":"Level 31"}]},{"id":85,"name":"dodrio","types":["normal","flying"],"stats":{"hp":60,"attack":110,"defense":70,"spatk":60,"spdef":60,"speed":110},"species":"Triple Bird","height":1.8,"weight":85.2,"moves":["whirlwind","fly","fury-attack","peck"],"evolutions":[{"name":"doduo","method":"Base"},{"name":"dodrio","method":"Level 31"}]},{"id":86,"name":"seel","types":["water"],"stats":{"hp":65,"attack":45,"defense":55,"spatk":45,"spdef":70,"speed":45},"species":"Sea Lion","height":1.1,"weight":90,"moves":["pay-day","slam","headbutt","horn-drill"],"evolutions":[{"name":"seel","method":"Base"},{"name":"dewgong","method":"Level 34"}]},{"id":87,"name":"dewgong","types":["water","ice"],"stats":{"hp":90,"attack":70,"defense":80,"spatk":70,"spdef":95,"speed":70},"species":"Sea Lion","height":1.7,"weight":120,"moves":["pay-day","slam","headbutt","horn-drill"],"evolutions":[{"name":"seel","method":"Base"},{"name":"dewgong","method":"Level 34"}]},{"id":88,"name":"grimer","types":["poison"],"stats":{"hp":80,"attack":80,"defense":50,"spatk":40,"spdef":50,"speed":25},"species":"Sludge","height":0.9,"weight":30,"moves":["fire-punch","ice-punch","thunder-punch","pound"],"evolutions":[{"name":"grimer","method":"Base"},{"name":"muk","method":"Level 38"}]},{"id":89,"name":"muk","types":["poison"],"stats":{"hp":105,"attack":105,"defense":75,"spatk":65,"spdef":100,"speed":50},"species":"Sludge","height":1.2,"weight":30,"moves":["fire-punch","ice-punch","thunder-punch","pound"],"evolutions":[{"name":"grimer","method":"Base"},{"name":"muk","method":"Level 38"}]},{"id":90,"name":"shellder","types":["water"],"stats":{"hp":30,"attack":65,"defense":100,"spatk":45,"spdef":25,"speed":40},"species":"Bivalve","height":0.3,"weight":4,"moves":["tackle","take-down","double-edge","water-gun"],"evolutions":[{"name":"shellder","method":"Base"},{"name":"cloyster","method":"Water Stone"}]},{"id":91,"name":"cloyster","types":["water","ice"],"stats":{"hp":50,"attack":95,"defense":180,"spatk":85,"spdef":45,"speed":70},"species":"Bivalve","height":1.5,"weight":132.5,"moves":["tackle","take-down","double-edge","water-gun"],"evolutions":[{"name":"shellder","method":"Base"},{"name":"cloyster","method":"Water Stone"}]},{"id":92,"name":"gastly","types":["ghost","poison"],"stats":{"hp":30,"attack":35,"defense":30,"spatk":100,"spdef":35,"speed":80},"species":"Gas","height":1.3,"weight":0.1,"moves":["fire-punch","ice-punch","thunder-punch","lick"],"evolutions":[{"name":"gastly","method":"Base"},{"name":"haunter","method":"Level 25"},{"name":"gengar","method":"Trade"}]},{"id":93,"name":"haunter","types":["ghost","poison"],"stats":{"hp":45,"attack":50,"defense":45,"spatk":115,"spdef":55,"speed":95},"species":"Gas","height":1.6,"weight":0.1,"moves":["fire-punch","ice-punch","thunder-punch","lick"],"evolutions":[{"name":"gastly","method":"Base"},{"name":"haunter","method":"Level 25"},{"name":"gengar","method":"Trade"}]},{"id":94,"name":"gengar","types":["ghost","poison"],"stats":{"hp":60,"attack":65,"defense":60,"spatk":130,"spdef":75,"speed":110},"species":"Shadow","height":1.5,"weight":40.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"gastly","method":"Base"},{"name":"haunter","method":"Level 25"},{"name":"gengar","method":"Trade"}]},{"id":95,"name":"onix","types":["rock","ground"],"stats":{"hp":35,"attack":45,"defense":160,"spatk":30,"spdef":45,"speed":70},"species":"Rock Snake","height":8.8,"weight":210,"moves":["bind","slam","headbutt","tackle"],"evolutions":[{"name":"onix","method":"Base"},{"name":"steelix","method":"Trade holding Metal Coat"}]},{"id":96,"name":"drowzee","types":["psychic"],"stats":{"hp":60,"attack":48,"defense":45,"spatk":43,"spdef":90,"speed":42},"species":"Hypnosis","height":1,"weight":32.4,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"drowzee","method":"Base"},{"name":"hypno","method":"Level 26"}]},{"id":97,"name":"hypno","types":["psychic"],"stats":{"hp":85,"attack":73,"defense":70,"spatk":73,"spdef":115,"speed":67},"species":"Hypnosis","height":1.6,"weight":75.6,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"drowzee","method":"Base"},{"name":"hypno","method":"Level 26"}]},{"id":98,"name":"krabby","types":["water"],"stats":{"hp":30,"attack":105,"defense":90,"spatk":25,"spdef":25,"speed":50},"species":"River Crab","height":0.4,"weight":6.5,"moves":["swords-dance","cut","vise-grip","guillotine"],"evolutions":[{"name":"krabby","method":"Base"},{"name":"kingler","method":"Level 28"}]},{"id":99,"name":"kingler","types":["water"],"stats":{"hp":55,"attack":130,"defense":115,"spatk":50,"spdef":50,"speed":75},"species":"Pincer","height":1.3,"weight":60,"moves":["swords-dance","cut","vise-grip","guillotine"],"evolutions":[{"name":"krabby","method":"Base"},{"name":"kingler","method":"Level 28"}]},{"id":100,"name":"voltorb","types":["electric"],"stats":{"hp":40,"attack":30,"defense":50,"spatk":55,"spdef":55,"speed":100},"species":"Ball","height":0.5,"weight":10.4,"moves":["headbutt","tackle","take-down","double-edge"],"evolutions":[{"name":"voltorb","method":"Base"},{"name":"electrode","method":"Level 30"}]},{"id":101,"name":"electrode","types":["electric"],"stats":{"hp":60,"attack":50,"defense":70,"spatk":80,"spdef":80,"speed":150},"species":"Ball","height":1.2,"weight":66.6,"moves":["headbutt","tackle","take-down","double-edge"],"evolutions":[{"name":"voltorb","method":"Base"},{"name":"electrode","method":"Level 30"}]},{"id":102,"name":"exeggcute","types":["grass","psychic"],"stats":{"hp":60,"attack":40,"defense":80,"spatk":60,"spdef":45,"speed":40},"species":"Egg","height":0.4,"weight":2.5,"moves":["swords-dance","barrage","headbutt","tackle"],"evolutions":[{"name":"exeggcute","method":"Base"},{"name":"exeggutor","method":"Leaf Stone"}]},{"id":103,"name":"exeggutor","types":["grass","psychic"],"stats":{"hp":95,"attack":95,"defense":85,"spatk":125,"spdef":75,"speed":55},"species":"Coconut","height":2,"weight":120,"moves":["swords-dance","stomp","barrage","headbutt"],"evolutions":[{"name":"exeggcute","method":"Base"},{"name":"exeggutor","method":"Leaf Stone"}]},{"id":104,"name":"cubone","types":["ground"],"stats":{"hp":50,"attack":50,"defense":95,"spatk":40,"spdef":50,"speed":35},"species":"Lonely","height":0.4,"weight":6.5,"moves":["mega-punch","fire-punch","thunder-punch","mega-kick"],"evolutions":[{"name":"cubone","method":"Base"},{"name":"marowak","method":"Level 28"}]},{"id":105,"name":"marowak","types":["ground"],"stats":{"hp":60,"attack":80,"defense":110,"spatk":50,"spdef":80,"speed":45},"species":"Bone Keeper","height":1,"weight":45,"moves":["mega-punch","fire-punch","thunder-punch","mega-kick"],"evolutions":[{"name":"cubone","method":"Base"},{"name":"marowak","method":"Level 28"}]},{"id":106,"name":"hitmonlee","types":["fighting"],"stats":{"hp":50,"attack":120,"defense":53,"spatk":35,"spdef":110,"speed":87},"species":"Kicking","height":1.5,"weight":49.8,"moves":["mega-punch","mega-kick","double-kick","rolling-kick"],"evolutions":[{"name":"tyrogue","method":"Base"},{"name":"hitmonlee","method":"Level 20, Attack > Defense"}]},{"id":107,"name":"hitmonchan","types":["fighting"],"stats":{"hp":50,"attack":105,"defense":79,"spatk":35,"spdef":110,"speed":76},"species":"Punching","height":1.4,"weight":50.2,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"tyrogue","method":"Base"},{"name":"hitmonchan","method":"Level 20, Attack < Defense"}]},{"id":108,"name":"lickitung","types":["normal"],"stats":{"hp":90,"attack":55,"defense":75,"spatk":60,"spdef":75,"speed":30},"species":"Licking","height":1.2,"weight":65.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"lickitung","method":"Base"},{"name":"lickilicky","method":"Level up while knowing Rollout"}]},{"id":109,"name":"koffing","types":["poison"],"stats":{"hp":40,"attack":65,"defense":95,"spatk":60,"spdef":45,"speed":35},"species":"Poison Gas","height":0.6,"weight":1,"moves":["tackle","smog","sludge","smokescreen"],"evolutions":[{"name":"koffing","method":"Base"},{"name":"weezing","method":"Level 35"}]},{"id":110,"name":"weezing","types":["poison"],"stats":{"hp":65,"attack":90,"defense":120,"spatk":85,"spdef":70,"speed":60},"species":"Poison Gas","height":1.2,"weight":9.5,"moves":["tackle","smog","sludge","smokescreen"],"evolutions":[{"name":"koffing","method":"Base"},{"name":"weezing","method":"Level 35"}]},{"id":111,"name":"rhyhorn","types":["rock","ground"],"stats":{"hp":80,"attack":85,"defense":95,"spatk":30,"spdef":30,"speed":25},"species":"Spikes","height":1,"weight":115,"moves":["swords-dance","stomp","horn-attack","horn-drill"],"evolutions":[{"name":"rhyhorn","method":"Base"},{"name":"rhydon","method":"Level 42"},{"name":"rhyperior","method":"Trade holding Protector"}]},{"id":112,"name":"rhydon","types":["rock","ground"],"stats":{"hp":105,"attack":130,"defense":120,"spatk":45,"spdef":45,"speed":40},"species":"Drill","height":1.9,"weight":120,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"rhyhorn","method":"Base"},{"name":"rhydon","method":"Level 42"},{"name":"rhyperior","method":"Trade holding Protector"}]},{"id":113,"name":"chansey","types":["normal"],"stats":{"hp":250,"attack":5,"defense":5,"spatk":35,"spdef":105,"speed":50},"species":"Egg","height":1.1,"weight":34.6,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"happiny","method":"Hold Oval Stone, Level up during day"},{"name":"chansey","method":"Base"},{"name":"blissey","method":"High Friendship"}]},{"id":114,"name":"tangela","types":["grass"],"stats":{"hp":65,"attack":55,"defense":115,"spatk":100,"spdef":40,"speed":60},"species":"Vine","height":1,"weight":35,"moves":["swords-dance","cut","bind","slam"],"evolutions":[{"name":"tangela","method":"Base"},{"name":"tangrowth","method":"Level up while knowing Ancient Power"}]},{"id":115,"name":"kangaskhan","types":["normal"],"stats":{"hp":105,"attack":95,"defense":80,"spatk":40,"spdef":80,"speed":90},"species":"Parent","height":2.2,"weight":80,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"kangaskhan","method":"Base"}]},{"id":116,"name":"horsea","types":["water"],"stats":{"hp":30,"attack":40,"defense":70,"spatk":70,"spdef":25,"speed":60},"species":"Dragon","height":0.4,"weight":8,"moves":["headbutt","tackle","take-down","double-edge"],"evolutions":[{"name":"horsea","method":"Base"},{"name":"seadra","method":"Level 32"},{"name":"kingdra","method":"Trade holding Dragon Scale"}]},{"id":117,"name":"seadra","types":["water"],"stats":{"hp":55,"attack":65,"defense":95,"spatk":95,"spdef":45,"speed":85},"species":"Dragon","height":1.2,"weight":25,"moves":["headbutt","tackle","take-down","double-edge"],"evolutions":[{"name":"horsea","method":"Base"},{"name":"seadra","method":"Level 32"},{"name":"kingdra","method":"Trade holding Dragon Scale"}]},{"id":118,"name":"goldeen","types":["water"],"stats":{"hp":45,"attack":67,"defense":60,"spatk":35,"spdef":50,"speed":63},"species":"Goldfish","height":0.6,"weight":15,"moves":["horn-attack","horn-drill","fury-attack","tackle"],"evolutions":[{"name":"goldeen","method":"Base"},{"name":"seaking","method":"Level 33"}]},{"id":119,"name":"seaking","types":["water"],"stats":{"hp":80,"attack":92,"defense":65,"spatk":65,"spdef":80,"speed":68},"species":"Goldfish","height":1.3,"weight":39,"moves":["horn-attack","horn-drill","fury-attack","tackle"],"evolutions":[{"name":"goldeen","method":"Base"},{"name":"seaking","method":"Level 33"}]},{"id":120,"name":"staryu","types":["water"],"stats":{"hp":30,"attack":45,"defense":55,"spatk":70,"spdef":55,"speed":85},"species":"Star Shape","height":0.8,"weight":34.5,"moves":["tackle","take-down","double-edge","water-gun"],"evolutions":[{"name":"staryu","method":"Base"},{"name":"starmie","method":"Water Stone"}]},{"id":121,"name":"starmie","types":["water","psychic"],"stats":{"hp":60,"attack":75,"defense":85,"spatk":100,"spdef":85,"speed":115},"species":"Mysterious","height":1.1,"weight":80,"moves":["tackle","take-down","double-edge","water-gun"],"evolutions":[{"name":"staryu","method":"Base"},{"name":"starmie","method":"Water Stone"}]},{"id":122,"name":"mr-mime","types":["psychic","fairy"],"stats":{"hp":40,"attack":45,"defense":65,"spatk":100,"spdef":120,"speed":90},"species":"Barrier","height":1.3,"weight":54.5,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"mime-jr","method":"Level up while knowing Mimic"},{"name":"mr-mime","method":"Base"}]},{"id":123,"name":"scyther","types":["bug","flying"],"stats":{"hp":70,"attack":110,"defense":80,"spatk":55,"spdef":80,"speed":105},"species":"Mantis","height":1.5,"weight":56,"moves":["swords-dance","cut","wing-attack","headbutt"],"evolutions":[{"name":"scyther","method":"Base"},{"name":"scizor","method":"Trade holding Metal Coat"}]},{"id":124,"name":"jynx","types":["ice","psychic"],"stats":{"hp":65,"attack":50,"defense":35,"spatk":115,"spdef":95,"speed":95},"species":"Human Shape","height":1.4,"weight":40.6,"moves":["mega-punch","ice-punch","mega-kick","double-slap"],"evolutions":[{"name":"smoochum","method":"Base"},{"name":"jynx","method":"Level 30"}]},{"id":125,"name":"electabuzz","types":["electric"],"stats":{"hp":65,"attack":83,"defense":57,"spatk":95,"spdef":85,"speed":105},"species":"Electric","height":1.1,"weight":30,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"elekid","method":"Base"},{"name":"electabuzz","method":"Level 30"},{"name":"electivire","method":"Trade holding Electirizer"}]},{"id":126,"name":"magmar","types":["fire"],"stats":{"hp":65,"attack":95,"defense":57,"spatk":100,"spdef":85,"speed":93},"species":"Spitfire","height":1.3,"weight":44.5,"moves":["mega-punch","fire-punch","mega-kick","ember"],"evolutions":[{"name":"magby","method":"Base"},{"name":"magmar","method":"Level 30"},{"name":"magmortar","method":"Trade holding Magmarizer"}]},{"id":127,"name":"pinsir","types":["bug"],"stats":{"hp":65,"attack":125,"defense":100,"spatk":55,"spdef":70,"speed":85},"species":"Stag Beetle","height":1.5,"weight":55,"moves":["swords-dance","cut","vise-grip","guillotine"],"evolutions":[{"name":"pinsir","method":"Base"}]},{"id":128,"name":"tauros","types":["normal"],"stats":{"hp":75,"attack":100,"defense":95,"spatk":40,"spdef":70,"speed":110},"species":"Wild Bull","height":1.4,"weight":88.4,"moves":["stomp","horn-attack","horn-drill","fury-attack"],"evolutions":[{"name":"tauros","method":"Base"}]},{"id":129,"name":"magikarp","types":["water"],"stats":{"hp":20,"attack":10,"defense":55,"spatk":15,"spdef":20,"speed":80},"species":"Fish","height":0.9,"weight":10,"moves":["tackle","splash","flail","bounce"],"evolutions":[{"name":"magikarp","method":"Base"},{"name":"gyarados","method":"Level 20"}]},{"id":130,"name":"gyarados","types":["water","flying"],"stats":{"hp":95,"attack":125,"defense":79,"spatk":60,"spdef":100,"speed":81},"species":"Atrocious","height":6.5,"weight":235,"moves":["bind","slam","headbutt","tackle"],"evolutions":[{"name":"magikarp","method":"Base"},{"name":"gyarados","method":"Level 20"}]},{"id":131,"name":"lapras","types":["water","ice"],"stats":{"hp":130,"attack":85,"defense":80,"spatk":85,"spdef":95,"speed":60},"species":"Transport","height":2.5,"weight":220,"moves":["horn-drill","sing","body-slam","take-down"],"evolutions":[{"name":"lapras","method":"Base"}]},{"id":132,"name":"ditto","types":["normal"],"stats":{"hp":48,"attack":48,"defense":48,"spatk":48,"spdef":48,"speed":48},"species":"Transform","height":0.3,"weight":4,"moves":["transform"],"evolutions":[{"name":"ditto","method":"Base"}]},{"id":133,"name":"eevee","types":["normal"],"stats":{"hp":55,"attack":55,"defense":50,"spatk":45,"spdef":65,"speed":55},"species":"Evolution","height":0.3,"weight":6.5,"moves":["sand-attack","headbutt","tackle","body-slam"],"evolutions":[{"name":"eevee","method":"Base"},{"name":"vaporeon","method":"Water Stone"},{"name":"jolteon","method":"Thunder Stone"},{"name":"flareon","method":"Fire Stone"}]},{"id":134,"name":"vaporeon","types":["water"],"stats":{"hp":130,"attack":65,"defense":60,"spatk":110,"spdef":95,"speed":65},"species":"Bubble Jet","height":1,"weight":29,"moves":["sand-attack","headbutt","tackle","body-slam"],"evolutions":[{"name":"eevee","method":"Base"},{"name":"vaporeon","method":"Water Stone"}]},{"id":135,"name":"jolteon","types":["electric"],"stats":{"hp":65,"attack":65,"defense":60,"spatk":110,"spdef":95,"speed":130},"species":"Lightning","height":0.8,"weight":24.5,"moves":["sand-attack","double-kick","headbutt","tackle"],"evolutions":[{"name":"eevee","method":"Base"},{"name":"jolteon","method":"Thunder Stone"}]},{"id":136,"name":"flareon","types":["fire"],"stats":{"hp":65,"attack":130,"defense":60,"spatk":95,"spdef":110,"speed":65},"species":"Flame","height":0.9,"weight":25,"moves":["ember","sand-attack","headbutt","tackle"],"evolutions":[{"name":"eevee","method":"Base"},{"name":"flareon","method":"Fire Stone"}]},{"id":137,"name":"porygon","types":["normal"],"stats":{"hp":65,"attack":60,"defense":70,"spatk":85,"spdef":75,"speed":40},"species":"Virtual","height":0.8,"weight":36.5,"moves":["tackle","take-down","double-edge","ice-beam"],"evolutions":[{"name":"porygon","method":"Base"},{"name":"porygon2","method":"Trade holding Up-Grade"}]},{"id":138,"name":"omanyte","types":["rock","water"],"stats":{"hp":35,"attack":40,"defense":100,"spatk":90,"spdef":55,"speed":35},"species":"Spiral","height":0.4,"weight":7.5,"moves":["slam","horn-attack","headbutt","tackle"],"evolutions":[{"name":"omanyte","method":"Base"},{"name":"omastar","method":"Level 40"}]},{"id":139,"name":"omastar","types":["rock","water"],"stats":{"hp":70,"attack":60,"defense":125,"spatk":115,"spdef":70,"speed":55},"species":"Spiral","height":1,"weight":35,"moves":["slam","horn-attack","horn-drill","headbutt"],"evolutions":[{"name":"omanyte","method":"Base"},{"name":"omastar","method":"Level 40"}]},{"id":140,"name":"kabuto","types":["rock","water"],"stats":{"hp":30,"attack":80,"defense":90,"spatk":55,"spdef":45,"speed":55},"species":"Shellfish","height":0.5,"weight":11.5,"moves":["scratch","cut","sand-attack","headbutt"],"evolutions":[{"name":"kabuto","method":"Base"},{"name":"kabutops","method":"Level 40"}]},{"id":141,"name":"kabutops","types":["rock","water"],"stats":{"hp":60,"attack":115,"defense":105,"spatk":65,"spdef":70,"speed":80},"species":"Shellfish","height":1.3,"weight":40.5,"moves":["swords-dance","scratch","cut","sand-attack"],"evolutions":[{"name":"kabuto","method":"Base"},{"name":"kabutops","method":"Level 40"}]},{"id":142,"name":"aerodactyl","types":["rock","flying"],"stats":{"hp":80,"attack":105,"defense":65,"spatk":60,"spdef":75,"speed":130},"species":"Fossil","height":1.8,"weight":59,"moves":["razor-wind","wing-attack","fly","headbutt"],"evolutions":[{"name":"aerodactyl","method":"Base"}]},{"id":143,"name":"snorlax","types":["normal"],"stats":{"hp":160,"attack":110,"defense":65,"spatk":65,"spdef":110,"speed":30},"species":"Sleeping","height":2.1,"weight":460,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"munchlax","method":"High Friendship"},{"name":"snorlax","method":"Base"}]},{"id":144,"name":"articuno","types":["ice","flying"],"stats":{"hp":90,"attack":85,"defense":100,"spatk":95,"spdef":125,"speed":85},"species":"Freeze","height":1.7,"weight":55.4,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"articuno","method":"Base"}]},{"id":145,"name":"zapdos","types":["electric","flying"],"stats":{"hp":90,"attack":90,"defense":85,"spatk":125,"spdef":90,"speed":100},"species":"Electric","height":1.6,"weight":52.6,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"zapdos","method":"Base"}]},{"id":146,"name":"moltres","types":["fire","flying"],"stats":{"hp":90,"attack":100,"defense":90,"spatk":125,"spdef":85,"speed":90},"species":"Flame","height":2,"weight":60,"moves":["razor-wind","gust","wing-attack","whirlwind"],"evolutions":[{"name":"moltres","method":"Base"}]},{"id":147,"name":"dratini","types":["dragon"],"stats":{"hp":41,"attack":64,"defense":45,"spatk":50,"spdef":50,"speed":50},"species":"Dragon","height":1.8,"weight":3.3,"moves":["bind","slam","headbutt","tackle"],"evolutions":[{"name":"dratini","method":"Base"},{"name":"dragonair","method":"Level 30"},{"name":"dragonite","method":"Level 55"}]},{"id":148,"name":"dragonair","types":["dragon"],"stats":{"hp":61,"attack":84,"defense":65,"spatk":70,"spdef":70,"speed":70},"species":"Dragon","height":4,"weight":16.5,"moves":["bind","slam","horn-drill","headbutt"],"evolutions":[{"name":"dratini","method":"Base"},{"name":"dragonair","method":"Level 30"},{"name":"dragonite","method":"Level 55"}]},{"id":149,"name":"dragonite","types":["dragon","flying"],"stats":{"hp":91,"attack":134,"defense":95,"spatk":100,"spdef":100,"speed":80},"species":"Dragon","height":2.2,"weight":210,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"dratini","method":"Base"},{"name":"dragonair","method":"Level 30"},{"name":"dragonite","method":"Level 55"}]},{"id":150,"name":"mewtwo","types":["psychic"],"stats":{"hp":106,"attack":110,"defense":90,"spatk":154,"spdef":90,"speed":130},"species":"Genetic","height":2,"weight":122,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"mewtwo","method":"Base"}]},{"id":151,"name":"mew","types":["psychic"],"stats":{"hp":100,"attack":100,"defense":100,"spatk":100,"spdef":100,"speed":100},"species":"New Species","height":0.4,"weight":4,"moves":["mega-punch","fire-punch","ice-punch","thunder-punch"],"evolutions":[{"name":"mew","method":"Base"}]}];
+
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        // This function now reliably uses the embedded data from the start.
+        const initializeWithData = (data) => {
+            pokemonData = data;
+            populatePokemonList();
+            fetchAndDisplayPokemon(currentPokemonId);
+        };
+
+        try {
+            // Attempt to fetch the full Gen 1-4 dataset.
+            const response = await fetch('https://gist.githubusercontent.com/gemini-builder/6a03120155b1111075775f2b87a935b3/raw/pokedex_gen1-4.json');
+            if (!response.ok) {
+                // If the fetch fails, it will fall into the catch block.
+                throw new Error('Network response was not ok, using fallback.');
+            }
+            const fullData = await response.json();
+            initializeWithData(fullData);
+        } catch (error) {
+            // If the fetch fails, use the embedded Gen 1 data as a fallback.
+            console.error(error.message);
+            initializeWithData(pokemonData);
+        }
+    });
+
+    // --- FUNCTIONS ---
+    /**
+     * Capitalizes the first letter of a string.
+     * @param {string} string - The string to capitalize.
+     * @returns {string} The capitalized string.
+     */
+    const capitalize = (string) => string.charAt(0).toUpperCase() + string.slice(1);
+
+    /**
+     * Formats the Pokémon ID with leading zeros (e.g., 1 -> #001).
+     * @param {number} id - The Pokémon's national ID.
+     * @returns {string} The formatted ID string.
+     */
+    const formatId = (id) => `#${id.toString().padStart(3, '0')}`;
+
+    /**
+     * Updates all UI elements with the data of the selected Pokémon.
+     * @param {object} pokemon - The Pokémon data object.
+     */
+    const displayPokemon = (pokemon) => {
+        if (!pokemon) {
+            pokemonImageEl.src = `https://placehold.co/200x200/e5e7eb/4b5563?text=N/A`;
+            pokemonImageEl.alt = "Pokemon not found";
+            pokemonNameEl.textContent = "Not Found";
+            pokemonIdEl.textContent = "#???";
+            return;
+        }
+
+        // Update image source based on shiny toggle
+        const shinySuffix = isShiny ? '/shiny' : '';
+        const imageUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork${shinySuffix}/${pokemon.id}.png`;
+        pokemonImageEl.src = imageUrl;
+        pokemonImageEl.alt = `Official artwork for ${capitalize(pokemon.name)}`;
+        pokemonImageEl.onerror = () => { 
+            pokemonImageEl.src = `https://placehold.co/200x200/e5e7eb/4b5563?text=?`; 
+            pokemonImageEl.alt = `Image for ${capitalize(pokemon.name)} could not be loaded.`;
+        };
+
+        // Update left panel info
+        pokemonIdEl.textContent = formatId(pokemon.id);
+        pokemonNameEl.textContent = capitalize(pokemon.name.replace('-', ' '));
+        
+        pokemonTypesEl.innerHTML = '';
+        pokemon.types.forEach(type => {
+            if (!type) return;
+            const typeColor = typeColors[type] || 'bg-gray-400';
+            const typeBadge = document.createElement('span');
+            typeBadge.className = `type-badge text-xs text-white px-2 py-1 rounded-md ${typeColor}`;
+            typeBadge.textContent = type.toUpperCase();
+            pokemonTypesEl.appendChild(typeBadge);
+        });
+
+        // Update right panel info
+        pokemonNameRightEl.textContent = capitalize(pokemon.name.replace('-', ' '));
+        pokemonSpeciesEl.innerHTML = `<span class="font-bold">Species:</span> ${pokemon.species}`;
+        pokemonHeightEl.innerHTML = `<span class="font-bold">Height:</span> ${pokemon.height} m`;
+        pokemonWeightEl.innerHTML = `<span class="font-bold">Weight:</span> ${pokemon.weight} kg`;
+        
+        // Update stats bars
+        statsContainer.innerHTML = '';
+        const maxStatValue = 255;
+        const stats = pokemon.stats;
+        const highestStatValue = Math.max(...Object.values(stats));
+
+        for (const [stat, value] of Object.entries(stats)) {
+            const statName = stat.replace('sp', 'Sp. ').replace('atk', 'Attack').replace('def', 'Defense');
+            const statPercentage = (value / maxStatValue) * 100;
+            const isHighest = value === highestStatValue;
+            
+            let barColor = value < 50 ? 'bg-red-500' : value < 90 ? 'bg-yellow-400' : 'bg-green-500';
+
+            const statEl = document.createElement('div');
+            statEl.innerHTML = `
+                <div class="flex justify-between items-center text-sm ${isHighest ? 'stat-highlight' : ''}">
+                    <span class="font-bold capitalize">${capitalize(statName)}</span>
+                    <span>${value}</span>
+                </div>
+                <div class="w-full stat-bar-bg rounded-full h-2.5 mt-1">
+                    <div class="stat-bar ${barColor} h-2.5 rounded-full" style="width: ${statPercentage}%"></div>
+                </div>
+            `;
+            statsContainer.appendChild(statEl);
+        }
+
+        // Update notable moves
+        movesContainer.innerHTML = pokemon.moves.map(move => `<div>- ${capitalize(move.replace('-', ' '))}</div>`).join('');
+
+        // Update evolution chain
+        evolutionContainer.innerHTML = '';
+        if (pokemon.evolutions && pokemon.evolutions.length > 0) {
+            pokemon.evolutions.forEach((evo, index) => {
+                const evoData = pokemonData.find(p => p.name === evo.name);
+                if (evoData) {
+                    const evoEl = document.createElement('div');
+                    evoEl.className = 'evolution-item text-center';
+                    evoEl.setAttribute('tabindex', '0');
+                    evoEl.setAttribute('aria-label', `View ${capitalize(evo.name)}`);
+                    evoEl.innerHTML = `
+                        <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${evoData.id}.png" alt="${capitalize(evo.name)}" class="mx-auto w-20 h-20">
+                        <p>${capitalize(evo.name)}</p>
+                        ${evo.method ? `<p class="text-xs text-gray-400">(${evo.method})</p>` : ''}
+                    `;
+                    evoEl.addEventListener('click', () => fetchAndDisplayPokemon(evoData.id));
+                    evoEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') fetchAndDisplayPokemon(evoData.id); });
+                    evolutionContainer.appendChild(evoEl);
+
+                    if (index < pokemon.evolutions.length - 1) {
+                        const arrow = document.createElement('div');
+                        arrow.className = 'text-2xl text-gray-400 my-1';
+                        arrow.textContent = '↓';
+                        evolutionContainer.appendChild(arrow);
+                    }
+                }
+            });
+        } else {
+            evolutionContainer.innerHTML = '<p>This Pokémon does not evolve.</p>';
+        }
+
+        // Highlight current pokemon in the list
+        document.querySelectorAll('.pokemon-list-item').forEach(item => {
+            item.classList.remove('bg-sky-500', 'font-bold');
+            if (parseInt(item.dataset.id) === pokemon.id) {
+                item.classList.add('bg-sky-500', 'font-bold');
+                if (document.activeElement !== item) { // Avoid scrolling if user is navigating list
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        });
+    };
+
+    /**
+     * Finds and displays a Pokémon by its ID or name.
+     * @param {number|string} identifier - The ID or name of the Pokémon.
+     */
+    const fetchAndDisplayPokemon = (identifier) => {
+        let pokemon;
+        if (typeof identifier === 'number') {
+            pokemon = pokemonData.find(p => p.id === identifier);
+        } else if (typeof identifier === 'string') {
+            pokemon = pokemonData.find(p => p.name.toLowerCase() === identifier.toLowerCase().replace(' ', '-'));
+        }
+
+        if (pokemon) {
+            currentPokemonId = pokemon.id;
+            displayPokemon(pokemon);
+        } else {
+            alert('Pokémon not found!');
+        }
+    };
+    
+    /**
+     * Populates the list of Pokémon on the left panel.
+     */
+    const populatePokemonList = () => {
+        pokemonListEl.innerHTML = ''; // Clear list before populating
+        pokemonData.forEach(pokemon => {
+            const listItem = document.createElement('div');
+            listItem.className = 'pokemon-list-item p-2 rounded-md cursor-pointer hover:bg-sky-700 transition-colors text-sm';
+            listItem.textContent = `${formatId(pokemon.id)} ${capitalize(pokemon.name.replace('-', ' '))}`;
+            listItem.dataset.id = pokemon.id;
+            listItem.setAttribute('tabindex', '0');
+            listItem.addEventListener('click', () => fetchAndDisplayPokemon(pokemon.id));
+            listItem.addEventListener('keydown', (e) => { if (e.key === 'Enter') fetchAndDisplayPokemon(pokemon.id); });
+            pokemonListEl.appendChild(listItem);
+        });
+    };
+
+    /**
+     * Filters the Pokémon list based on user input in the search bar.
+     */
+    const filterPokemonList = () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        document.querySelectorAll('.pokemon-list-item').forEach(item => {
+            if (item.textContent.toLowerCase().includes(searchTerm)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    };
+
+    // --- EVENT LISTENERS ---
+    searchInput.addEventListener('input', filterPokemonList);
+
+    prevButtons.forEach(btn => {
+        btn.addEventListener('click', () => { if (currentPokemonId > 1) fetchAndDisplayPokemon(--currentPokemonId); });
+        btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && currentPokemonId > 1) fetchAndDisplayPokemon(--currentPokemonId); });
+    });
+    
+    nextButtons.forEach(btn => {
+        btn.addEventListener('click', () => { if (currentPokemonId < pokemonData.length) fetchAndDisplayPokemon(++currentPokemonId); });
+        btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && currentPokemonId < pokemonData.length) fetchAndDisplayPokemon(++currentPokemonId); });
+    });
+
+
+    shinyToggle.addEventListener('change', (e) => {
+        isShiny = e.target.checked;
+        fetchAndDisplayPokemon(currentPokemonId);
+    });
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === tab.dataset.tab) {
+                    content.classList.add('active');
+                }
+            });
+        });
+        tab.addEventListener('keydown', (e) => { if (e.key === 'Enter') tab.click(); });
+    });
+
+</script>
+</body>
+</html>
